@@ -86,11 +86,6 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	// Process task asynchronously
-	go func() {
-		h.taskWorker.ProcessTaskAsync(context.Background(), *task)
-	}()
-
 	c.JSON(http.StatusCreated, task)
 }
 
@@ -256,7 +251,7 @@ func (h *TaskHandler) BatchProcessTasks(c *gin.Context) {
 	// Start batch processing in background
 	go func() {
 		ctx := context.Background()
-		if err := h.taskWorker.BatchProcessTasks(ctx, req.TaskIDs, req.BatchSize); err != nil {
+		if err := h.taskWorker.BatchProcessTasks(ctx, req.TaskIDs, req.BatchSize, req.Status); err != nil {
 			fmt.Printf("Batch processing failed: %v\n", err)
 		}
 	}()
@@ -266,6 +261,7 @@ func (h *TaskHandler) BatchProcessTasks(c *gin.Context) {
 
 // BatchProcessRequest represents a request to process multiple tasks
 type BatchProcessRequest struct {
-	TaskIDs   []uuid.UUID `json:"task_ids" binding:"required,min=1"`
-	BatchSize int         `json:"batch_size" binding:"min=1,max=100"`
+	TaskIDs   []uuid.UUID       `json:"task_ids" binding:"required,min=1"`
+	BatchSize int               `json:"batch_size" binding:"min=1,max=100"`
+	Status    models.TaskStatus `json:"status" binding:"required,oneof=pending in_progress completed cancelled"`
 }

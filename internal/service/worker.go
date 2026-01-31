@@ -20,6 +20,11 @@ type TaskWorker struct {
 	repo       repository.TaskRepository
 }
 
+type TaskUpdate struct {
+	Task      models.Task
+	NewStatus models.TaskStatus
+}
+
 func NewTaskWorker(maxWorkers int, repo repository.TaskRepository) *TaskWorker {
 	return &TaskWorker{
 		taskChan:   make(chan models.Task, 100),
@@ -29,38 +34,31 @@ func NewTaskWorker(maxWorkers int, repo repository.TaskRepository) *TaskWorker {
 }
 
 // ProcessTaskAsync demonstrates goroutine pool pattern
-func (w *TaskWorker) ProcessTaskAsync(ctx context.Context, task models.Task) {
+func (w *TaskWorker) ProcessTaskAsync(ctx context.Context, task models.Task, newStatus models.TaskStatus) {
 	w.wg.Add(1)
-
 	go func() {
 		defer w.wg.Done()
-
-		// Acquire worker slot
 		w.workerPool <- struct{}{}
 		defer func() { <-w.workerPool }()
 
-		// Process task with timeout
 		processCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		if err := w.processTask(processCtx, task); err != nil {
+		if err := w.processTask(processCtx, task, newStatus); err != nil {
 			log.Printf("Failed to process task %s: %v", task.ID, err)
-			// Retry logic could be added here
 		}
 	}()
 }
 
-func (w *TaskWorker) processTask(ctx context.Context, task models.Task) error {
-	// Simulate some processing time
+func (w *TaskWorker) processTask(ctx context.Context, task models.Task, newStatus models.TaskStatus) error {
 	select {
 	case <-time.After(100 * time.Millisecond):
-		// Task processing logic here
-		log.Printf("Processed task: %s - %s", task.ID, task.Title)
+		task.Status = newStatus
 
-		// Update task status in database
-		completedAt := time.Now()
-		task.Status = models.StatusCompleted
-		task.CompletedAt = &completedAt
+		if newStatus == models.StatusCompleted {
+			completedAt := time.Now()
+			task.CompletedAt = &completedAt
+		}
 
 		return w.repo.Update(ctx, &task)
 	case <-ctx.Done():
@@ -69,7 +67,7 @@ func (w *TaskWorker) processTask(ctx context.Context, task models.Task) error {
 }
 
 // BatchProcessTasks demonstrates channel-based batch processing
-func (w *TaskWorker) BatchProcessTasks(ctx context.Context, taskIDs []uuid.UUID, batchSize int) error {
+func (w *TaskWorker) BatchProcessTasks(ctx context.Context, taskIDs []uuid.UUID, batchSize int, newStatus models.TaskStatus) error {
 	// Create batches
 	batches := make([][]uuid.UUID, 0, (len(taskIDs)+batchSize-1)/batchSize)
 
@@ -103,7 +101,7 @@ func (w *TaskWorker) BatchProcessTasks(ctx context.Context, taskIDs []uuid.UUID,
 						continue
 					}
 
-					w.ProcessTaskAsync(ctx, *task)
+					w.ProcessTaskAsync(ctx, *task, newStatus) // Added newStatus parameter
 				}
 			}
 		}(batch)

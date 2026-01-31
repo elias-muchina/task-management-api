@@ -73,7 +73,7 @@ func TestTaskWorker_ProcessConcurrentTasks(t *testing.T) {
 	defer cancel()
 
 	for _, task := range tasks {
-		worker.ProcessTaskAsync(ctx, task)
+		worker.ProcessTaskAsync(ctx, task, models.StatusCompleted) // Added status parameter
 	}
 
 	worker.Wait()
@@ -112,8 +112,59 @@ func TestTaskWorker_BatchProcessTasks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := worker.BatchProcessTasks(ctx, taskIDs, 2) // Batch size of 2
+	err := worker.BatchProcessTasks(ctx, taskIDs, 2, models.StatusCompleted) // Added status parameter
 	assert.NoError(t, err)
+
+	worker.Wait()
+	mockRepo.AssertExpectations(t)
+}
+
+// Add more tests for different statuses
+func TestTaskWorker_ProcessWithDifferentStatuses(t *testing.T) {
+	mockRepo := new(MockTaskRepository)
+	worker := service.NewTaskWorker(2, mockRepo)
+
+	testCases := []struct {
+		name   string
+		task   models.Task
+		status models.TaskStatus
+	}{
+		{
+			name:   "Process as pending",
+			task:   models.Task{ID: uuid.New(), Title: "Pending Task"},
+			status: models.StatusPending,
+		},
+		{
+			name:   "Process as in progress",
+			task:   models.Task{ID: uuid.New(), Title: "In Progress Task"},
+			status: models.StatusInProgress,
+		},
+		{
+			name:   "Process as completed",
+			task:   models.Task{ID: uuid.New(), Title: "Completed Task"},
+			status: models.StatusCompleted,
+		},
+		{
+			name:   "Process as cancelled",
+			task:   models.Task{ID: uuid.New(), Title: "Cancelled Task"},
+			status: models.StatusCancelled,
+		},
+	}
+
+	// Setup mock
+	for _, tc := range testCases {
+		mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(task *models.Task) bool {
+			return task.ID == tc.task.ID && task.Status == tc.status
+		})).Return(nil).Once()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Process with different statuses
+	for _, tc := range testCases {
+		worker.ProcessTaskAsync(ctx, tc.task, tc.status)
+	}
 
 	worker.Wait()
 	mockRepo.AssertExpectations(t)

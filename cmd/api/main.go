@@ -14,6 +14,7 @@ import (
 	"task-manager-api/internal/middleware"
 	"task-manager-api/internal/repository"
 	"task-manager-api/internal/service"
+	"task-manager-api/internal/utils"
 	"task-manager-api/pkg/database"
 
 	"github.com/gin-gonic/gin"
@@ -56,6 +57,9 @@ func main() {
 			defer redisClient.Close()
 		}
 	}
+
+	// Initialize JWT
+	utils.InitJWT(cfg.JWT.Secret)
 
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(conn.Conn())

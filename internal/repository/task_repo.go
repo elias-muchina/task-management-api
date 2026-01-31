@@ -32,7 +32,7 @@ type taskRepository struct {
 func NewTaskRepository(db *pgx.Conn, cache *redis.Client) TaskRepository {
 	return &taskRepository{
 		db:    db,
-		cache: cache,
+		cache: cache, // This can be nil
 	}
 }
 
@@ -51,8 +51,13 @@ func (r *taskRepository) getCacheKey(userID uuid.UUID, filter models.TaskFilter)
 	return key
 }
 
-// Get tasks from Redis cache
+// Get tasks from Redis cache (safe with nil cache)
 func (r *taskRepository) getTasksFromCache(ctx context.Context, userID uuid.UUID, filter models.TaskFilter) ([]models.Task, error) {
+	// If Redis is not available, return nil (cache miss)
+	if r.cache == nil {
+		return nil, nil
+	}
+
 	key := r.getCacheKey(userID, filter)
 
 	val, err := r.cache.Get(ctx, key).Result()
@@ -139,8 +144,13 @@ func (r *taskRepository) getTasksFromDB(ctx context.Context, userID uuid.UUID, f
 	return tasks, nil
 }
 
-// Cache tasks in Redis with expiration
+// Cache tasks in Redis with expiration (safe with nil cache)
 func (r *taskRepository) cacheTasks(ctx context.Context, userID uuid.UUID, filter models.TaskFilter, tasks []models.Task) error {
+	// If Redis is not available, skip caching
+	if r.cache == nil {
+		return nil
+	}
+
 	key := r.getCacheKey(userID, filter)
 
 	data, err := json.Marshal(tasks)
@@ -157,8 +167,13 @@ func (r *taskRepository) cacheTasks(ctx context.Context, userID uuid.UUID, filte
 	return nil
 }
 
-// GetTasksWithConcurrency uses goroutine pattern
+// GetTasksWithConcurrency uses goroutine pattern (safe with nil cache)
 func (r *taskRepository) GetTasksWithConcurrency(ctx context.Context, userID uuid.UUID, filter models.TaskFilter) ([]models.Task, error) {
+	// If Redis is not available, just use database directly
+	if r.cache == nil {
+		return r.getTasksFromDB(ctx, userID, filter)
+	}
+
 	// Create channels for concurrent processing
 	tasksChan := make(chan []models.Task)
 	errChan := make(chan error, 2)
@@ -334,8 +349,13 @@ func (r *taskRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// Helper to invalidate all cache entries for a user
+// Helper to invalidate all cache entries for a user (safe with nil cache)
 func (r *taskRepository) invalidateUserCache(ctx context.Context, userID uuid.UUID) {
+	// If Redis is not available, skip invalidation
+	if r.cache == nil {
+		return
+	}
+
 	pattern := fmt.Sprintf("tasks:%s*", userID)
 
 	// Use SCAN to find all matching keys

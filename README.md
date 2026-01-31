@@ -16,7 +16,7 @@ A production-ready REST API for task management built with Go, featuring authent
 
 ## 🛠️ Tech Stack
 
-- **Go 1.21+** - Backend language
+- **Go 1.24+** - Backend language
 - **Gin** - HTTP web framework
 - **PostgreSQL** - Primary database
 - **Redis** - Caching & rate limiting
@@ -29,7 +29,7 @@ A production-ready REST API for task management built with Go, featuring authent
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.24+
 - Docker & Docker Compose
 - Make (optional)
 

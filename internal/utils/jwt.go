@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"task-manager-api/internal/config"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,13 +15,23 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-var cfg = config.LoadConfig()
+// Global JWT secret - must be initialized
+var jwtSecret []byte
 
-// Secret key for JWT (should be loaded from environment in production)
-var jwtSecret = cfg.JWT.Secret
+// InitJWT initializes the JWT secret (call this in main.go)
+func InitJWT(secret string) {
+	if secret == "" {
+		panic("JWT_SECRET is not set in configuration")
+	}
+	jwtSecret = []byte(secret)
+}
 
 // GenerateToken creates a new JWT token for a user
 func GenerateToken(userID uuid.UUID, email string) (string, error) {
+	if len(jwtSecret) == 0 {
+		return "", fmt.Errorf("JWT secret not initialized. Call utils.InitJWT() first")
+	}
+
 	expirationTime := time.Now().Add(24 * time.Hour) // Token expires in 24 hours
 
 	claims := &Claims{
@@ -37,17 +46,21 @@ func GenerateToken(userID uuid.UUID, email string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString(jwtSecret) // jwtSecret is now []byte
 }
 
 // ValidateToken validates a JWT token and returns the claims
 func ValidateToken(tokenString string) (*Claims, error) {
+	if len(jwtSecret) == 0 {
+		return nil, fmt.Errorf("JWT secret not initialized")
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		// Validate signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return jwtSecret, nil
+		return jwtSecret, nil // jwtSecret is []byte
 	})
 
 	if err != nil {
